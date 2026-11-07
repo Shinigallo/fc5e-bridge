@@ -1,0 +1,15 @@
+{
+  "id": "fc5e-bridge",
+  "name": "FC5e Bridge",
+  "version": "0.1.0",
+  "title": "FC5e Bridge",
+  "description": "Relays Fight Club 5e app requests into the world: reads owned actors, applies white-listed sheet updates and triggers native dnd5e rolls.",
+  "authors": [{ "name": "Shinigallo" }],
+  "license": "MIT",
+  "compatibility": { "minimum": "12.343", "verified": "12.343" },
+  "esmodules": ["main.mjs"],
+  "socket": false,
+  "url": "https://github.com/Shinigallo/fc5e-bridge",
+  "manifest": "https://github.com/Shinigallo/fc5e-bridge/releases/latest/download/module.json",
+  "download": "https://github.com/Shinigallo/fc5e-bridge/releases/latest/download/module.zip"
+}
