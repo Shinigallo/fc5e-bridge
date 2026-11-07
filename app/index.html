@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#14141a">
+<title>FC5e</title>
+<style>
+  :root { color-scheme: dark; --bg:#14141a; --card:#1e1e27; --line:#33333f; --txt:#ececf1; --dim:#a0a0b0; --acc:#c9a227; --bad:#e05555; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 system-ui,sans-serif; padding:12px 12px calc(64px + env(safe-area-inset-bottom)); }
+  h1 { font-size:1.2rem; margin:0 0 8px; }
+  h2 { font-size:.8rem; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); margin:20px 0 6px; }
+  button, input, select { font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:10px; min-height:44px; padding:8px 10px; }
+  button:active { background:var(--line); }
+  button.alt { color:var(--dim); }
+  select { width:100%; }
+  .row { display:flex; gap:8px; align-items:stretch; }
+  .row > * { flex:1; }
+  .hp .val { display:flex; gap:6px; align-items:baseline; justify-content:center; }
+  .hp .val b { font-size:1.6rem; }
+  .hp .val em { color:var(--dim); font-style:normal; font-size:.8rem; }
+  .ac { color:var(--dim); margin:6px 0 0; }
+  .grid { display:grid; gap:8px; }
+  .abil { grid-template-columns:repeat(2,1fr); }
+  .abil .cell { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:8px; }
+  .abil .lab { display:block; color:var(--dim); font-size:.75rem; text-transform:uppercase; margin-bottom:6px; }
+  .abil button { width:100%; margin-top:4px; font-size:.85rem; }
+  .skills { grid-template-columns:repeat(2,1fr); }
+  .skills button { display:flex; justify-content:space-between; gap:8px; text-align:left; font-size:.9rem; }
+  .items { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+  .items li { display:flex; align-items:center; gap:6px; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:6px; }
+  .items .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.9rem; }
+  .items b { min-width:2ch; text-align:center; }
+  .items button { min-width:44px; }
+  .muted { color:var(--dim); }
+  #toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(120%); background:var(--acc); color:#221c00; font-weight:700; padding:10px 20px; border-radius:999px; transition:transform .15s; pointer-events:none; }
+  #toast.on { transform:translateX(-50%) translateY(0); }
+  #toast.bad { background:var(--bad); color:#fff; }
+</style>
+</head>
+<body>
+<main id="app"><p class="muted">Connessione…</p></main>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module">
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const fmt = n => (n > 0 ? "+" : "") + (n ?? 0);
+const ABIL = ["str", "dex", "con", "int", "wis", "cha"];
+const state = { token: "", actors: [], actor: null };
+
+let toastTimer;
+function toast(msg, bad) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.className = bad ? "on bad" : "on";
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = "", 2500);
+}
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ token: state.token, ...body }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  return data;
+}
+
+async function patch(changes) {
+  try {
+    state.actor = await api(`/api/patch/${state.actor.id}`, { patch: changes });
+    render();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function doRoll(kind, key) {
+  toast("…");
+  try {
+    const r = await api("/api/roll", { actorId: state.actor.id, kind, key });
+    toast(r.total ?? "—");
+  } catch (e) { toast(e.message, true); }
+}
+
+function render() {
+  const a = state.actor, hp = a.hp ?? {};
+  const max = hp.tempmax || hp.max;
+  const skills = Object.entries(a.skills ?? {})
+    .sort((x, y) => String(x[1].label ?? x[0]).localeCompare(String(y[1].label ?? y[0]), "it"));
+  const items = (a.items ?? []).filter(i => i.quantity !== undefined || i.equipped !== undefined || i.prepared !== undefined);
+
+  $("#app").innerHTML = `
+    <h1>${esc(a.name)}</h1>
+    ${state.actors.length > 1 ? `<select id="who">${state.actors.map(o =>
+      `<option value="${esc(o.id)}"${o.id === a.id ? " selected" : ""}>${esc(o.name)}</option>`).join("")}</select>` : ""}
+
+    <section class="row hp">
+      <button data-hp="-1" aria-label="Perdi punti ferita">−</button>
+      <button class="val" data-hp="set" aria-label="Imposta punti ferita">
+        <b>${hp.value ?? "?"}</b><span>/ ${max ?? "?"}</span>
+        ${hp.temp ? `<em>+${hp.temp} temp</em>` : ""}
+        ${hp.tempmax && hp.tempmax !== hp.max ? `<em>max ${hp.tempmax}</em>` : ""}
+      </button>
+      <button data-hp="1" aria-label="Recupera punti ferita">+</button>
+    </section>
+    <p class="ac">CA ${a.ac ?? "—"}</p>
+
+    <h2>Abilità</h2>
+    <div class="grid abil">
+      ${ABIL.filter(k => a.abilities?.[k]).map(k => {
+        const v = a.abilities[k];
+        return `<div class="cell">
+          <span class="lab">${esc(v.label ?? k)}</span>
+          <button data-roll="check:${k}">${fmt(v.mod)} prova</button>
+          <button class="alt" data-roll="save:${k}">${fmt(v.save)} TS</button>
+        </div>`;
+      }).join("")}
+    </div>
+
+    <h2>Tiri abilità</h2>
+    <div class="grid skills">
+      ${skills.map(([k, v]) => `<button data-roll="skill:${k}"><span>${esc(v.label ?? k)}</span><b>${fmt(v.total)}</b></button>`).join("")}
+    </div>
+
+    <h2>Oggetti</h2>
+    <ul class="items">
+      ${items.map(i => `<li>
+        <span class="nm">${esc(i.name)}</span>
+        ${i.quantity !== undefined ? `<button data-qty="-1" data-id="${esc(i.id)}" aria-label="Meno">−</button><b>${i.quantity}</b><button data-qty="1" data-id="${esc(i.id)}" aria-label="Più">+</button>` : ""}
+        ${i.equipped !== undefined ? `<button class="alt" data-equip="${esc(i.id)}" data-on="${!!i.equipped}">${i.equipped ? "Indossato" : "Equipaggia"}</button>` : ""}
+        ${i.prepared !== undefined ? `<button class="alt" data-prep="${esc(i.id)}" data-on="${!!i.prepared}">${i.prepared ? "Preparato" : "Prepara"}</button>` : ""}
+      </li>`).join("") || `<li class="muted">Nessun oggetto</li>`}
+    </ul>`;
+}
+
+async function load(actorId) {
+  state.actor = await api(`/api/actor/${actorId}`);
+  if (state.actor?.id) localStorage.setItem("fc5e.actor", state.actor.id);
+  render();
+}
+
+function showSetup(msg) {
+  $("#app").innerHTML = `<h1>FC5e</h1>
+    <p class="muted">${esc(msg || "Incolla il tuo token personale")}</p>
+    <form id="setup" class="grid">
+      <input id="token" autocomplete="off" autocapitalize="off" placeholder="token" aria-label="Token personale">
+      <button>Entra</button>
+    </form>`;
+  $("#setup").addEventListener("submit", async e => {
+    e.preventDefault();
+    const token = $("#token").value.trim();
+    if (!token) return;
+    state.token = token;
+    localStorage.setItem("fc5e.token", token);
+    localStorage.removeItem("fc5e.actor");
+    start();
+  });
+}
+
+async function start() {
+  if (!state.token) return showSetup();
+  try {
+    const { user, actors } = await api("/api/session");
+    state.actors = actors;
+    if (!actors.length) return showSetup(`${user} non ha personaggi`);
+    const saved = localStorage.getItem("fc5e.actor");
+    await load((actors.find(a => a.id === saved) ?? actors[0]).id);
+  } catch (e) {
+    showSetup(e.message);
+  }
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("button");
+  if (!t || !state.actor) return;
+  const { roll, hp, qty, id, equip, prep } = t.dataset;
+
+  if (roll) {
+    const [kind, key] = roll.split(":");
+    return doRoll(kind, key);
+  }
+  if (hp) {
+    const cur = state.actor.hp?.value ?? 0;
+    const max = state.actor.hp?.tempmax || state.actor.hp?.max || cur;
+    let next = cur;
+    if (hp === "set") {
+      const v = prompt("Punti ferita", String(cur));
+      if (v === null) return;
+      next = Number(v);
+    } else next = cur + Number(hp);
+    if (!Number.isFinite(next)) return;
+    return patch({ "system.attributes.hp.value": Math.max(0, Math.min(next, max)) });
+  }
+  if (qty) {
+    const item = state.actor.items.find(i => i.id === id);
+    return patch({ [`items.${id}.system.quantity`]: Math.max(0, (item.quantity ?? 0) + Number(qty)) });
+  }
+  if (equip) return patch({ [`items.${equip}.system.equipped`]: t.dataset.on !== "true" });
+  if (prep) return patch({ [`items.${prep}.system.preparation.prepared`]: t.dataset.on !== "true" });
+});
+
+document.addEventListener("change", e => {
+  if (e.target.id !== "who") return;
+  localStorage.setItem("fc5e.actor", e.target.value);
+  load(e.target.value).catch(err => toast(err.message, true));
+});
+
+const url = new URL(location.href);
+const fromUrl = url.searchParams.get("t");
+if (fromUrl) {
+  state.token = fromUrl;
+  localStorage.setItem("fc5e.token", fromUrl);
+  url.searchParams.delete("t");
+  history.replaceState({}, "", url);
+} else {
+  state.token = localStorage.getItem("fc5e.token") ?? "";
+}
+start();
+</script>
+</body>
+</html>

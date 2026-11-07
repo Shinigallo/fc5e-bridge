@@ -15,6 +15,12 @@ node bridge/server.mjs
 
 Prints the port and a `BRIDGE_KEY`. Use `PORT` / `BRIDGE_KEY` to pin them across restarts.
 
+## App
+
+Open `http://<host>:31415/?t=<token>` once on the phone: the token is stored and the URL is cleaned.
+The page lists the actor's HP/AC, ability checks and saves, skills and items, and every tap calls the
+API above — rolls land in Foundry chat, edits are written to the sheet.
+
 ## Install the module
 
 In Foundry: **Add-on Modules → Install Module → Manifest URL**:

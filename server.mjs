@@ -1,5 +1,18 @@
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { extname, join } from "node:path";
+
+const APP = fileURLToPath(new URL("./app/", import.meta.url));
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+};
 
 const PORT = Number(process.env.PORT ?? 31415);
 const KEY = process.env.BRIDGE_KEY || randomUUID();
@@ -117,6 +130,18 @@ const server = createServer(async (req, res) => {
       if (!job) return json(res, 404, { error: "not found" });
       const { status, body } = await enqueue(job.op, job.data);
       return json(res, status, body);
+    }
+
+    if (req.method === "GET" && (path === "/" || path.startsWith("/app/"))) {
+      const name = path === "/" ? "index.html" : path.slice(5);
+      if (!/^[A-Za-z0-9._-]+$/.test(name)) return json(res, 404, { error: "not found" });
+      try {
+        const body = await readFile(join(APP, name));
+        res.writeHead(200, { "content-type": MIME[extname(name)] ?? "application/octet-stream", "cache-control": "no-store" });
+        return res.end(body);
+      } catch {
+        return json(res, 404, { error: "not found" });
+      }
     }
 
     return json(res, 404, { error: "not found" });

@@ -48,6 +48,12 @@ try {
   const forbidden = await fetch(`${base}/m/poll?wait=0.1`);
   assert.equal(forbidden.status, 403);
 
+  // 1b. the phone page is served
+  const page = await fetch(base + "/");
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /<main id="app">/);
+  assert.equal((await fetch(`${base}/app/../server.mjs`)).status, 404);
+
   // 2. session: request resolves with what the module replied
   const session = post("/api/session", { token: "t1" });
   const job = await serveOne({ ok: true, data: { user: "Player2", actors: [{ id: "a", name: "Aelar" }] } });
