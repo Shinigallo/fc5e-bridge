@@ -141,34 +141,54 @@ async function load(actorId) {
   render();
 }
 
-function showSetup(msg) {
-  $("#app").innerHTML = `<h1>FC5e</h1>
-    <p class="muted">${esc(msg || "Incolla il tuo token personale")}</p>
-    <form id="setup" class="grid">
-      <input id="token" autocomplete="off" autocapitalize="off" placeholder="token" aria-label="Token personale">
+async function showPick(msg) {
+  $("#app").innerHTML = `<h1>FC5e</h1><p class="muted">${esc(msg || "Chi sei?")}</p>`;
+  let players;
+  try {
+    ({ players } = await fetch("/api/players").then(r => r.json()));
+  } catch {
+    $("#app").insertAdjacentHTML("beforeend", `<p class="muted">Bridge non raggiungibile.</p><button id="retry">Riprova</button>`);
+    $("#retry").addEventListener("click", () => showPick());
+    return;
+  }
+  if (!players?.length) {
+    $("#app").insertAdjacentHTML("beforeend", `<p class="muted">Nessun giocatore configurato in Foundry.</p>`);
+    return;
+  }
+  $("#app").insertAdjacentHTML("beforeend", `<form id="pick" class="grid">
+      <select id="who" aria-label="Giocatore">${players.map(p =>
+        `<option value="${esc(p.name)}">${esc(p.name)}${p.claimed ? " (già collegato)" : ""}</option>`).join("")}</select>
+      <input id="pw" type="password" placeholder="Password di partita" aria-label="Password di partita" autocomplete="current-password">
       <button>Entra</button>
-    </form>`;
-  $("#setup").addEventListener("submit", async e => {
+    </form>
+    <p class="muted">Tocca il tuo nome e la password che ti ha dato il GM.</p>`);
+  $("#pick").addEventListener("submit", async e => {
     e.preventDefault();
-    const token = $("#token").value.trim();
-    if (!token) return;
-    state.token = token;
-    localStorage.setItem("fc5e.token", token);
-    localStorage.removeItem("fc5e.actor");
-    start();
+    try {
+      const { token } = await api("/api/claim", { name: $("#who").value, password: $("#pw").value });
+      state.token = token;
+      localStorage.setItem("fc5e.token", token);
+      start();
+    } catch (err) { toast(err.message, true); }
   });
 }
 
 async function start() {
-  if (!state.token) return showSetup();
+  if (!state.token) return showPick();
   try {
     const { user, actors } = await api("/api/session");
     state.actors = actors;
-    if (!actors.length) return showSetup(`${user} non ha personaggi`);
+    if (!actors.length) {
+      state.token = "";
+      localStorage.removeItem("fc5e.token");
+      return showPick(`${user} non ha personaggi`);
+    }
     const saved = localStorage.getItem("fc5e.actor");
     await load((actors.find(a => a.id === saved) ?? actors[0]).id);
   } catch (e) {
-    showSetup(e.message);
+    state.token = "";
+    localStorage.removeItem("fc5e.token");
+    showPick(e.message);
   }
 }
 

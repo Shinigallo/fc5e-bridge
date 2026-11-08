@@ -71,7 +71,11 @@ function enqueue(op, data) {
 }
 
 function opFor(path, method, data) {
+  if (path === "/api/players" && method === "GET") return { op: "players", data: {} };
   if (method !== "POST") return null;
+  if (path === "/api/claim") {
+    return { op: "claim", data: { name: need(data.name, "name"), password: need(data.password, "password") } };
+  }
   if (path === "/api/session") return { op: "session", data: { token: need(data.token, "token") } };
   if (path === "/api/roll") {
     return {
@@ -125,7 +129,7 @@ const server = createServer(async (req, res) => {
     }
 
     if (path.startsWith("/api/")) {
-      const data = await readBody(req);
+      const data = req.method === "GET" ? {} : await readBody(req);
       const job = opFor(path, req.method, data);
       if (!job) return json(res, 404, { error: "not found" });
       const { status, body } = await enqueue(job.op, job.data);

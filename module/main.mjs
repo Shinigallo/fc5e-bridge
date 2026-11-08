@@ -11,19 +11,41 @@ const ROLLS = {
   formula: (actor, key) => new Roll(key).toMessage(),
 };
 
-function usersByToken() {
+function storeTokens() {
   try {
-    return JSON.parse(game.settings.get(MOD, "tokens") ?? "{}");
+    return JSON.parse(game.settings.get(MOD, "tokens") ?? "{}") ?? {};
   } catch {
     return {};
   }
 }
 
 function resolveUser(token) {
-  const name = usersByToken()[token];
+  const name = storeTokens()[token];
   const user = name ? game.users.getName(name) : null;
   if (!user) throw new Error("unknown token");
   return user;
+}
+
+/** Players without a token yet, plus who already claimed one (locked). */
+function players() {
+  const taken = storeTokens();
+  return game.users.filter(u => !u.isGM).map(u => ({ name: u.name, claimed: Boolean(taken[u.name]) }));
+}
+
+/** Bind a player name to a token. The shared game password is the gate; a name keeps its
+ *  token so a phone that cleared its storage can log back in with the same password. */
+async function claim(name, password) {
+  const expected = game.settings.get(MOD, "gamePassword") ?? "";
+  if (!expected) throw new Error("game password not set by the GM");
+  if (password !== expected) throw new Error("wrong game password");
+  const user = game.users.getName(name);
+  if (!user || user.isGM) throw new Error("unknown player");
+  const tokens = storeTokens();
+  if (tokens[name]) return tokens[name];
+  const token = crypto.randomUUID().replaceAll("-", "");
+  tokens[name] = token;
+  await game.settings.set(MOD, "tokens", JSON.stringify(tokens));
+  return token;
 }
 
 function ownActor(user, actorId) {
@@ -70,6 +92,8 @@ async function applyPatch(actor, patch) {
 
 async function handle({ op, data }) {
   try {
+    if (op === "players") return { ok: true, data: { players: players() } };
+    if (op === "claim") return { ok: true, data: { token: await claim(data.name, data.password) } };
     const user = resolveUser(data.token);
     if (op === "session") {
       const actors = game.actors
@@ -129,9 +153,14 @@ Hooks.once("init", () => {
     hint: "Printed by the bridge at startup (BRIDGE_KEY).",
     scope: "world", config: true, type: String, default: "",
   });
+  game.settings.register(MOD, "gamePassword", {
+    name: "Game password",
+    hint: "Shared password the players type on their phone. Required.",
+    scope: "world", config: true, type: String, default: "",
+  });
   game.settings.register(MOD, "tokens", {
     name: "Tokens",
-    hint: 'JSON map of token to Foundry user name, e.g. {"a1b2c3":"Player2"}.',
+    hint: 'JSON map of user name to token, filled in by the phones. Delete an entry to unlink that player.',
     scope: "world", config: true, type: String, default: "{}",
   });
 });

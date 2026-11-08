@@ -54,6 +54,19 @@ try {
   assert.match(await page.text(), /<main id="app">/);
   assert.equal((await fetch(`${base}/app/../server.mjs`)).status, 404);
 
+  // 1c. the player list needs no token
+  const players = fetch(base + "/api/players").then(r => r.json());
+  const pJob = await serveOne({ ok: true, data: { players: [{ name: "Player2", claimed: false }] } });
+  assert.equal(pJob.op, "players");
+  assert.equal((await players).players[0].name, "Player2");
+
+  // 1d. claiming carries the shared game password
+  const claim = post("/api/claim", { name: "Player2", password: "pw" });
+  const cJob = await serveOne({ ok: true, data: { token: "abc" } });
+  assert.equal(cJob.op, "claim");
+  assert.deepEqual(cJob.data, { name: "Player2", password: "pw" });
+  assert.equal((await claim).body.token, "abc");
+
   // 2. session: request resolves with what the module replied
   const session = post("/api/session", { token: "t1" });
   const job = await serveOne({ ok: true, data: { user: "Player2", actors: [{ id: "a", name: "Aelar" }] } });

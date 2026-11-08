@@ -17,7 +17,7 @@ Prints the port and a `BRIDGE_KEY`. Use `PORT` / `BRIDGE_KEY` to pin them across
 
 ## App
 
-Open `http://<host>:31415/?t=<token>` once on the phone: the token is stored and the URL is cleaned.
+Open `http://<host>:31415` on the phone: pick your player name and type the shared game password.
 The page lists the actor's HP/AC, ability checks and saves, skills and items, and every tap calls the
 API above — rolls land in Foundry chat, edits are written to the sheet.
 
@@ -33,9 +33,10 @@ Then enable **FC5e Bridge**.
 
 In the module settings:
 
-- **Bridge URL** — where the GM browser reaches the bridge (`http://127.0.0.1:31415` on the same PC).
+- **Bridge URL** — where the GM browser reaches the bridge; must be reachable from the phones too.
 - **Bridge key** — the `BRIDGE_KEY` printed at startup.
-- **Tokens** — one entry per player: `{"k3y":"Player2"}`. The token is the phone's secret;
+- **Game password** — the one password the players type on their phone. Required.
+- **Tokens** — filled in by the phones (`{"Player2":"<token>"}`). Delete an entry to unlink that player;
   every request is executed as that Foundry user, so actor ownership applies.
 
 ## API
@@ -44,6 +45,8 @@ All bodies are JSON, all responses are JSON.
 
 | Call | Body | Result |
 | --- | --- | --- |
+| `GET /api/players` | — | `{players:[{name,claimed}]}` (Foundry players, no token needed) |
+| `POST /api/claim` | `{name, password}` | `{token}` — the shared game password unlocks the name once |
 | `POST /api/session` | `{token}` | `{user, actors:[{id,name,img,type}]}` |
 | `POST /api/actor/:id` | `{token}` | prepared sheet values + item list |
 | `POST /api/patch/:id` | `{token, patch}` | updated actor (same shape as above) |
