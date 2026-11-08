@@ -58,7 +58,7 @@ async function claim(name, password) {
   const tokens = storeTokens();
   const existing = player ? Object.entries(tokens).find(([, e]) => e === exec) : undefined;
   if (existing) return existing[0];
-  const token = crypto.randomUUID().replaceAll("-", "");
+  const token = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, "0")).join("");
   tokens[token] = exec;
   await game.settings.set(MOD, "tokens", JSON.stringify(tokens));
   return token;
