@@ -1,7 +1,7 @@
 {
   "id": "fc5e-bridge",
   "name": "FC5e Bridge",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "title": "FC5e Bridge",
   "description": "Relays Fight Club 5e app requests into the world: reads owned actors, applies white-listed sheet updates and triggers native dnd5e rolls.",
   "authors": [{ "name": "Shinigallo" }],

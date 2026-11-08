@@ -20,7 +20,8 @@ function storeTokens() {
 }
 
 function resolveUser(token) {
-  const name = storeTokens()[token];
+  const tokens = storeTokens();
+  const name = Object.keys(tokens).find(k => tokens[k] === token);
   const user = name ? game.users.getName(name) : null;
   if (!user) throw new Error("unknown token");
   return user;
