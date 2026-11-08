@@ -20,31 +20,46 @@ function storeTokens() {
 }
 
 function resolveUser(token) {
-  const tokens = storeTokens();
-  const name = Object.keys(tokens).find(k => tokens[k] === token);
-  const user = name ? game.users.getName(name) : null;
+  const exec = storeTokens()[token];
+  if (!exec) throw new Error("unknown token");
+  const user = exec.startsWith("user:") ? game.users.getName(exec.slice(5)) : game.user;
   if (!user) throw new Error("unknown token");
   return user;
 }
 
-/** Players without a token yet, plus who already claimed one (locked). */
+/** Picker list: Foundry player accounts when they exist, otherwise the GM's characters
+ *  (GM-only worlds have no player accounts; phones then act as the GM). */
 function players() {
-  const taken = storeTokens();
-  return game.users.filter(u => !u.isGM).map(u => ({ name: u.name, claimed: Boolean(taken[u.name]) }));
+  const taken = Object.values(storeTokens());
+  const nonGm = game.users.filter(u => !u.isGM);
+  if (nonGm.length) {
+    return nonGm.map(u => ({ name: u.name, claimed: taken.includes(`user:${u.name}`) }));
+  }
+  return game.actors
+    .filter(a => a.testUserPermission(game.user, OWNER))
+    .map(a => ({ name: a.name, claimed: false }));
 }
 
-/** Bind a player name to a token. The shared game password is the gate; a name keeps its
- *  token so a phone that cleared its storage can log back in with the same password. */
+/** Bind a picker name to a token, gated by the shared game password. A player account
+ *  keeps one token (re-login after a cleared phone); a GM-world character gets a fresh one. */
 async function claim(name, password) {
   const expected = game.settings.get(MOD, "gamePassword") ?? "";
   if (!expected) throw new Error("game password not set by the GM");
   if (password !== expected) throw new Error("wrong game password");
-  const user = game.users.getName(name);
-  if (!user || user.isGM) throw new Error("unknown player");
+  const player = game.users.filter(u => !u.isGM).find(u => u.name === name);
+  let exec;
+  if (player) {
+    exec = `user:${player.name}`;
+  } else {
+    const actor = game.actors.getName(name);
+    if (!actor || !actor.testUserPermission(game.user, OWNER)) throw new Error("unknown character");
+    exec = `gm:${name}`;
+  }
   const tokens = storeTokens();
-  if (tokens[name]) return tokens[name];
+  const existing = player ? Object.entries(tokens).find(([, e]) => e === exec) : undefined;
+  if (existing) return existing[0];
   const token = crypto.randomUUID().replaceAll("-", "");
-  tokens[name] = token;
+  tokens[token] = exec;
   await game.settings.set(MOD, "tokens", JSON.stringify(tokens));
   return token;
 }
@@ -161,7 +176,7 @@ Hooks.once("init", () => {
   });
   game.settings.register(MOD, "tokens", {
     name: "Tokens",
-    hint: 'JSON map of user name to token, filled in by the phones. Delete an entry to unlink that player.',
+    hint: 'JSON map token to identity, e.g. {"abc":"user:Player2"}. Filled in by the phones; delete an entry to unlink that player.',
     scope: "world", config: true, type: String, default: "{}",
   });
 });

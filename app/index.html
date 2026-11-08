@@ -152,7 +152,7 @@ async function showPick(msg) {
     return;
   }
   if (!players?.length) {
-    $("#app").insertAdjacentHTML("beforeend", `<p class="muted">Nessun giocatore configurato in Foundry.</p>`);
+    $("#app").insertAdjacentHTML("beforeend", `<p class="muted">Nessun account player né personaggio trovato in Foundry.</p>`);
     return;
   }
   $("#app").insertAdjacentHTML("beforeend", `<form id="pick" class="grid">
